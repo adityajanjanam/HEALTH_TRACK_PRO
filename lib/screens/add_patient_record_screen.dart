@@ -1,3 +1,5 @@
+// ignore_for_file: unused_import, unused_element, deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -31,8 +33,7 @@ class _AddPatientRecordScreenState extends State<AddPatientRecordScreen> {
   }
 
   Future<void> _initHive() async {
-    await Hive.initFlutter();
-    localBox = await Hive.openBox('offlineRecords');
+    localBox = await Hive.openBox('offlinePatientRecords');
     _loadLastRecord();
   }
 
@@ -51,74 +52,69 @@ class _AddPatientRecordScreenState extends State<AddPatientRecordScreen> {
     setState(() => isOffline = result == ConnectivityResult.none);
   }
 
-  Future<void> _syncOfflineData() async {
-    final records = localBox.toMap();
-    for (var entry in records.entries) {
-      try {
-        await ApiService.addRecord(entry.value);
-        await localBox.delete(entry.key);
-      } catch (_) {
-        // Ignore and retry next time
-      }
-    }
-  }
-
   Future<void> _saveRecord() async {
     if (_formKey.currentState!.validate()) {
-      final recordData = {
-        'patientId': widget.patientId,
-        'bloodPressure': bpController.text.trim(),
-        'oxygenLevel': oxygenController.text.trim(),
-        'heartRate': heartRateController.text.trim(),
-        'respiratoryRate': respiratoryRateController.text.trim(),
-        'timestamp': DateTime.now().toIso8601String(),
-      };
+      try {
+        // Create records in the format expected by the API
+        final records = [
+          {
+            'patientId': widget.patientId,
+            'type': 'Blood Pressure',
+            'value': bpController.text.trim(),
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+          {
+            'patientId': widget.patientId,
+            'type': 'Blood Oxygen Level',
+            'value': oxygenController.text.trim(),
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+          {
+            'patientId': widget.patientId,
+            'type': 'Heart Rate',
+            'value': heartRateController.text.trim(),
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+          {
+            'patientId': widget.patientId,
+            'type': 'Respiratory Rate',
+            'value': respiratoryRateController.text.trim(),
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+        ];
 
-      if (isOffline) {
-        await localBox.put('${widget.patientId}_${DateTime.now().millisecondsSinceEpoch}', recordData);
-        if (!mounted) return;
-        _showSnackbar('✅ Saved locally. Will sync when online.');
-        Navigator.pop(context);
-      } else {
-        try {
-          await ApiService.addRecord(recordData);
+        if (isOffline) {
+          // Save each record to Hive
+          for (var record in records) {
+            final key = '${widget.patientId}_${record['type']}_${DateTime.now().millisecondsSinceEpoch}';
+            await localBox.put(key, record);
+          }
           if (!mounted) return;
-          _showQRCode(recordData);
-          await _syncOfflineData();
-        } catch (e) {
+          _showSnackbar('✅ Records saved locally. Will sync when online.');
+          Navigator.pop(context);
+        } else {
+          // Save records to API
+          for (var record in records) {
+            await ApiService.addRecord(record);
+          }
           if (!mounted) return;
-          _showSnackbar('❌ Failed to save: $e');
+          _showSnackbar('✅ Records saved successfully!');
+          Navigator.pop(context);
         }
+      } catch (e) {
+        if (!mounted) return;
+        _showSnackbar('❌ Failed to save records: $e');
       }
     }
-  }
-
-  void _showQRCode(Map<String, dynamic> data) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('QR Code for Record'),
-        content: QrImageView(
-          data: data.toString(),
-          version: QrVersions.auto,
-          size: 200,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.popUntil(context, ModalRoute.withName('/viewPatient')),
-            child: const Text('Back to Patient Details'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: message.startsWith('✅') ? Colors.green : Colors.red,
+      ),
+    );
   }
 
   Widget _buildInputField({
@@ -128,42 +124,60 @@ class _AddPatientRecordScreenState extends State<AddPatientRecordScreen> {
     required String hintText,
     String? unit,
   }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hintText,
-        prefixIcon: Icon(icon),
-        suffixText: unit,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-        fillColor: Colors.white,
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: InputDecoration(
+                hintText: hintText,
+                hintStyle: TextStyle(color: Colors.grey.shade400),
+                prefixIcon: Icon(icon, color: Colors.blueAccent),
+                suffixText: unit,
+                suffixStyle: const TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.blueAccent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.blueAccent.withOpacity(0.5)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+            ),
+          ],
+        ),
       ),
-      validator: (value) => value == null || value.isEmpty ? 'Required' : null,
-    );
-  }
-
-  Widget _buildOfflineRecordList() {
-    final items = localBox.toMap().entries.where((e) => e.key.toString().startsWith(widget.patientId));
-    final sortedItems = items.toList()
-      ..sort((a, b) => b.key.toString().compareTo(a.key.toString()));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Pending Sync Records', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        ...sortedItems.map((entry) {
-          final ts = DateTime.tryParse(entry.value['timestamp'] ?? '') ?? DateTime.now();
-          return ListTile(
-            leading: const Icon(Icons.sync_problem, color: Colors.red),
-            title: Text('BP: ${entry.value['bloodPressure']}, HR: ${entry.value['heartRate']}'),
-            subtitle: Text(DateFormat.yMd().add_jm().format(ts)),
-            trailing: const Icon(Icons.warning, color: Colors.orange),
-          );
-        }),
-      ],
     );
   }
 
@@ -171,59 +185,157 @@ class _AddPatientRecordScreenState extends State<AddPatientRecordScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Patient Record'),
-        backgroundColor: Colors.blueAccent,
+        title: const Text(
+          'Add Patient Record',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.blue.shade800,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              _buildInputField(
-                label: 'Blood Pressure',
-                icon: Icons.bloodtype,
-                controller: bpController,
-                hintText: 'e.g., 120/80',
-                unit: 'mmHg',
-              ),
-              const SizedBox(height: 12),
-              _buildInputField(
-                label: 'Oxygen Level',
-                icon: Icons.bubble_chart,
-                controller: oxygenController,
-                hintText: 'e.g., 98',
-                unit: '%',
-              ),
-              const SizedBox(height: 12),
-              _buildInputField(
-                label: 'Heart Rate',
-                icon: Icons.monitor_heart,
-                controller: heartRateController,
-                hintText: 'e.g., 72',
-                unit: 'bpm',
-              ),
-              const SizedBox(height: 12),
-              _buildInputField(
-                label: 'Respiratory Rate',
-                icon: Icons.air,
-                controller: respiratoryRateController,
-                hintText: 'e.g., 16',
-                unit: 'breaths/min',
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _saveRecord,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  backgroundColor: Colors.blueAccent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Save Record', style: TextStyle(fontSize: 16, color: Colors.white)),
-              ),
-              const SizedBox(height: 30),
-              if (localBox.isOpen && localBox.isNotEmpty) _buildOfflineRecordList(),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.blue.shade800,
+              Colors.lightBlue.shade400,
+              Colors.blue.shade600,
             ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '📊 Patient Vitals',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Record the patient\'s vital signs below',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildInputField(
+                    label: 'Blood Pressure',
+                    icon: Icons.bloodtype,
+                    controller: bpController,
+                    hintText: 'e.g., 120/80',
+                    unit: 'mmHg',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInputField(
+                    label: 'Oxygen Level',
+                    icon: Icons.bubble_chart,
+                    controller: oxygenController,
+                    hintText: 'e.g., 98',
+                    unit: '%',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInputField(
+                    label: 'Heart Rate',
+                    icon: Icons.monitor_heart,
+                    controller: heartRateController,
+                    hintText: 'e.g., 72',
+                    unit: 'bpm',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInputField(
+                    label: 'Respiratory Rate',
+                    icon: Icons.air,
+                    controller: respiratoryRateController,
+                    hintText: 'e.g., 16',
+                    unit: 'breaths/min',
+                  ),
+                  const SizedBox(height: 24),
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          ElevatedButton(
+                            onPressed: _saveRecord,
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 50),
+                              backgroundColor: Colors.blueAccent,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 4,
+                            ),
+                            child: Text(
+                              isOffline ? 'Save Offline' : 'Save Record',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          if (isOffline) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.warning_amber, color: Colors.orange.shade800),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'You are currently offline. Records will be saved locally and synced when online.',
+                                      style: TextStyle(
+                                        color: Colors.orange.shade900,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -236,7 +348,6 @@ class _AddPatientRecordScreenState extends State<AddPatientRecordScreen> {
     oxygenController.dispose();
     heartRateController.dispose();
     respiratoryRateController.dispose();
-    Hive.close();
     super.dispose();
   }
 }

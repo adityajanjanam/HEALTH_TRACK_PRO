@@ -1,20 +1,27 @@
+// ignore_for_file: unused_local_variable, unnecessary_to_list_in_spreads, deprecated_member_use, deprecated_member_use, duplicate_ignore, no_leading_underscores_for_local_identifiers, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
 
 class ViewRecordsScreen extends StatefulWidget {
-  final String? patientId;
-  final String? patientName;
-  const ViewRecordsScreen({super.key, this.patientId, this.patientName});
+  final String patientId;
+  final String patientName;
+
+  const ViewRecordsScreen({
+    super.key,
+    required this.patientId,
+    required this.patientName,
+  });
 
   @override
   State<ViewRecordsScreen> createState() => _ViewRecordsScreenState();
 }
 
 class _ViewRecordsScreenState extends State<ViewRecordsScreen> {
-  late Future<Map<String, dynamic>> _patientFuture;
   late Future<List<dynamic>> _recordsFuture;
   bool showChart = false;
   String selectedType = 'Blood Pressure';
@@ -22,256 +29,423 @@ class _ViewRecordsScreenState extends State<ViewRecordsScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    _recordsFuture = ApiService.getPatientRecords(widget.patientId);
   }
 
-  void _fetchData() {
-    if (widget.patientId != null && widget.patientId!.isNotEmpty) {
-      _patientFuture = ApiService.getPatientById(widget.patientId!);
-      _recordsFuture = ApiService.getPatientRecords(widget.patientId!);
-    } else {
-      _patientFuture = Future.value({});
-      _recordsFuture = ApiService.getRecords('');
-    }
+  Future<void> _refreshRecords() async {
+    setState(() {
+      _recordsFuture = ApiService.getPatientRecords(widget.patientId);
+    });
   }
 
-  void _shareRecords(List<dynamic> records) {
+  Future<void> _shareRecords(List<dynamic> records) async {
+    try {
     final export = records.map((e) {
       final time = e['timestamp'] ?? e['date'] ?? e['createdAt'] ?? 'Unknown';
       return '${e['type']}: ${e['value']} at $time';
     }).join('\n');
-    Share.share(export, subject: 'Patient Record History');
+      await Share.share(export, subject: 'Patient Record History');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to share records: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
-  List<FlSpot> _buildChartPoints(List<dynamic> records, String type) {
-    final filtered = records.where((e) => e['type'].toString().toLowerCase() == type.toLowerCase()).toList();
-    return List.generate(filtered.length, (i) {
-      final value = double.tryParse(filtered[i]['value'].toString().split('/').first) ?? 0;
-      return FlSpot(i.toDouble(), value);
-    });
-  }
+  // Function to show the edit dialog
+  Future<void> _showEditRecordDialog(Map<String, dynamic> record) async {
+    final recordId = record['id'];
+    if (recordId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error: Record ID is missing'), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.patientName != null ? '${widget.patientName}\'s Records' : 'Patient Records'),
-        backgroundColor: Colors.teal.shade700,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share),
-            onPressed: () async {
-              final records = await _recordsFuture;
-              _shareRecords(records);
-            },
-          ),
-          IconButton(
-            icon: Icon(showChart ? Icons.list : Icons.bar_chart),
-            onPressed: () => setState(() => showChart = !showChart),
-          ),
-        ],
-      ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _patientFuture,
-        builder: (context, patientSnap) {
-          if (patientSnap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (patientSnap.hasError) {
-            return Center(child: Text('Error loading patient: ${patientSnap.error}'));
-          }
+    // Use separate controllers for the dialog
+    final typeController = TextEditingController(text: record['type']?.toString() ?? '');
+    final valueController = TextEditingController(text: record['value']?.toString() ?? '');
+    final _dialogFormKey = GlobalKey<FormState>();
 
-          final patient = patientSnap.data ?? {};
-
-          return FutureBuilder<List<dynamic>>(
-            future: _recordsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              } else if (snapshot.hasError) {
-                return Center(child: Text('Error loading records: ${snapshot.error}'));
-              } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Center(child: Text('No records found.'));
-              }
-
-              final records = snapshot.data!;
-              return Column(
-                children: [
-                  _buildPatientDetails(patient),
-                  if (showChart) _buildChartSection(records),
-                  if (!showChart)
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: records.length,
-                        itemBuilder: (context, index) {
-                          final record = records[index];
-                          final type = record['type'] ?? 'Unknown';
-                          final value = record['value'] ?? '-';
-                          final rawTimestamp = record['timestamp'] ?? record['date'] ?? record['createdAt'] ?? '';
-                          final formattedDate = _formatTimestamp(rawTimestamp.toString());
-                          final pendingSync = record['offline'] == true;
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6),
-                            child: Card(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 3,
-                              color: pendingSync ? Colors.yellow.shade100 : null,
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: Colors.teal.shade100,
-                                  child: Icon(_getIconForType(type), color: Colors.teal),
-                                ),
-                                title: Text(type, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('Value: $value\n$formattedDate'),
-                                trailing: pendingSync
-                                    ? const Text('Pending', style: TextStyle(color: Colors.orange))
-                                    : null,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildPatientDetails(Map<String, dynamic> patient) {
-    if (patient.isEmpty) return const SizedBox();
-
-    final String name = patient['name'] ?? 'Patient';
-    final String? photoUrl = patient['photo'];
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.teal.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.teal.shade300),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 32,
-            backgroundColor: Colors.teal.shade200,
-            backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
-            child: (photoUrl == null || photoUrl.isEmpty)
-                ? Text(name.isNotEmpty ? name[0] : '?',
-                    style: const TextStyle(fontSize: 24, color: Colors.white))
-                : null,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text('Age: ${patient['age'] ?? '-'}'),
-                Text('Gender: ${patient['gender'] ?? '-'}'),
-                Text('Contact: ${patient['contact'] ?? '-'}'),
-                Text('Email: ${patient['email'] ?? '-'}'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChartSection(List<dynamic> records) {
-    return Column(
-      children: [
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: DropdownButtonFormField<String>(
-            value: selectedType,
-            items: [
-              'Blood Pressure',
-              'Heart Rate',
-              'Oxygen Level',
-              'Temperature',
-              'Respiratory Rate'
-            ].map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
-            onChanged: (value) {
-              if (value != null) setState(() => selectedType = value);
-            },
-            decoration: const InputDecoration(
-              labelText: 'Record Type',
-              border: OutlineInputBorder(),
-            ),
+    final updatedData = await showDialog<Map<String, String>?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Record'),
+        content: Form(
+          key: _dialogFormKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Simple TextFormField for Type (could be Dropdown later)
+              TextFormField(
+                controller: typeController,
+                decoration: const InputDecoration(labelText: 'Record Type'),
+                validator: (value) => value == null || value.isEmpty ? 'Type cannot be empty' : null,
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: valueController,
+                decoration: const InputDecoration(labelText: 'Value'),
+                validator: (value) => value == null || value.isEmpty ? 'Value cannot be empty' : null,
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 250,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: LineChart(
-              LineChartData(
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) => Text('${value.toInt() + 1}'),
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: true),
-                  ),
-                ),
-                borderData: FlBorderData(show: true),
-                gridData: FlGridData(show: true),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: _buildChartPoints(records, selectedType),
-                    isCurved: true,
-                    barWidth: 3,
-                    color: Colors.orange,
-                    dotData: FlDotData(show: true),
-                  ),
-                ],
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (_dialogFormKey.currentState!.validate()) {
+                Navigator.pop(ctx, {
+                  'type': typeController.text.trim(),
+                  'value': valueController.text.trim(),
+                });
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (updatedData != null) {
+      try {
+        await ApiService.updateRecord(recordId.toString(), updatedData);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Record updated successfully'), backgroundColor: Colors.green),
+        );
+        _refreshRecords(); // Refresh the list after update
+      } catch (e) {
+        if (kDebugMode) {
+          print('Update API Error: $e');
+        } 
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Update failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildRecordCard(dynamic record) {
+    final time = record['timestamp'] ?? record['date'] ?? record['createdAt'] ?? 'Unknown';
+    final formattedTime = DateTime.tryParse(time)?.let((date) => DateFormat.yMMMd().add_jm().format(date)) ?? time;
+    final recordMap = Map<String, dynamic>.from(record as Map);
+    
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Icon(
+          _getIconForType(recordMap['type']),
+          color: Colors.blueAccent,
+          size: 32,
+        ),
+        title: Text(
+          recordMap['type'] ?? 'Unknown Type', // Handle null type
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.black87,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(
+              'Value: ${recordMap['value'] ?? 'N/A'}', // Handle null value
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.black54,
               ),
             ),
-          ),
+            Text(
+              'Recorded: $formattedTime',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
         ),
-      ],
+        // Add an Edit button to the trailing part
+        trailing: IconButton(
+          icon: Icon(Icons.edit, color: Colors.grey.shade600),
+          tooltip: 'Edit Record',
+          onPressed: () {
+            // Debug print the FULL record map
+            if (kDebugMode) { 
+              print('Record map for edit: $recordMap');
+            }
+            _showEditRecordDialog(recordMap);
+          },
+        ),
+      ),
     );
   }
 
   IconData _getIconForType(String type) {
     switch (type.toLowerCase()) {
       case 'blood pressure':
-        return Icons.favorite;
-      case 'heart rate':
-      case 'heartbeat rate':
-        return Icons.monitor_heart;
-      case 'oxygen level':
+        return Icons.bloodtype;
       case 'blood oxygen level':
         return Icons.bubble_chart;
-      case 'temperature':
-        return Icons.thermostat;
+      case 'heart rate':
+        return Icons.monitor_heart;
       case 'respiratory rate':
         return Icons.air;
       default:
-        return Icons.healing;
+        return Icons.medical_services;
     }
   }
 
-  String _formatTimestamp(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) return 'No Date';
-    try {
-      return DateFormat('EEE, MMM d • hh:mm a').format(DateTime.parse(timestamp));
-    } catch (_) {
-      return 'Invalid Date';
+  Widget _buildChart(List<dynamic> records) {
+    final recordsOfType = records.where((r) => r['type'] == selectedType).toList();
+    if (recordsOfType.isEmpty) {
+      return Center(
+        child: Text(
+          'No $selectedType records found',
+          style: const TextStyle(color: Colors.white70),
+        ),
+      );
     }
+
+    final spots = recordsOfType.asMap().entries.map((entry) {
+      final value = double.tryParse(entry.value['value'].toString().split('/').first) ?? 0;
+      return FlSpot(entry.key.toDouble(), value);
+    }).toList();
+
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.all(8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              selectedType,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 200,
+              child: LineChart(
+                LineChartData(
+                  gridData: const FlGridData(show: true),
+                  titlesData: const FlTitlesData(
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 40,
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 22,
+                      ),
+                    ),
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: true),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: true,
+                      color: Colors.blueAccent,
+                      barWidth: 3,
+                      dotData: const FlDotData(show: true),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: Colors.blueAccent.withOpacity(0.2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          '${widget.patientName}\'s Records',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.blue.shade800,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: _refreshRecords,
+          ),
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.white),
+            onPressed: () async {
+              final records = await _recordsFuture;
+              _shareRecords(records);
+            },
+          ),
+          IconButton(
+            icon: Icon(
+              showChart ? Icons.list : Icons.bar_chart,
+              color: Colors.white,
+            ),
+            onPressed: () => setState(() => showChart = !showChart),
+          ),
+        ],
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.blue.shade800,
+              Colors.lightBlue.shade400,
+              Colors.blue.shade600,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: FutureBuilder<List<dynamic>>(
+            future: _recordsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: Colors.white));
+              }
+              if (snapshot.hasError) {
+                // Show specific error, but not the generic "Resource not found" if handled by ApiService
+                final errorMessage = snapshot.error is NotFoundException 
+                  ? 'No records found for this patient.' // Handled case
+                  : 'Error loading records: ${snapshot.error}'; // Other errors
+                return Center(
+                  child: Card(
+                    margin: const EdgeInsets.all(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                         mainAxisSize: MainAxisSize.min,
+                         children: [
+                           Icon(Icons.error_outline, color: Colors.red.shade700, size: 48),
+                           const SizedBox(height: 16),
+                           Text(
+                            errorMessage,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, color: Colors.red.shade900),
+                           ),
+                           const SizedBox(height: 16),
+                           ElevatedButton.icon(
+                             icon: const Icon(Icons.refresh),
+                             label: const Text('Retry'),
+                             onPressed: _refreshRecords,
+                           )
+                         ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              if (snapshot.hasData) {
+                final records = snapshot.data!;
+                // Check if the list is empty AFTER confirming snapshot.hasData
+                if (records.isEmpty) {
+                  return Center(
+                    child: Card(
+                      margin: const EdgeInsets.all(16),
+                       shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                       ),
+                       child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                           children: [
+                             Icon(Icons.folder_off, size: 48, color: Colors.grey.shade400),
+                             const SizedBox(height: 16),
+                             const Text(
+                              'No Records Found',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Add some records for this patient first.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Refresh'),
+                              onPressed: _refreshRecords, 
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                // If records exist, show list or chart
+                return showChart
+                    ? _buildChart(records)
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: ListView.builder(
+                          itemCount: records.length,
+                          itemBuilder: (context, index) {
+                            return _buildRecordCard(records[index]);
+                          },
+                        ),
+                      );
+              }
+              // Should not happen with FutureBuilder, but added as fallback
+              return const Center(child: Text('Something went wrong.', style: TextStyle(color: Colors.white)));
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+extension<T> on T {
+  R let<R>(R Function(T) block) => block(this);
 }

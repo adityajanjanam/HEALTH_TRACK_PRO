@@ -1,4 +1,11 @@
+// ignore_for_file: unused_import, avoid_print
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
 
 // Modular route configuration
 import 'routes.dart';
@@ -6,74 +13,86 @@ import 'routes.dart';
 // Screens
 import 'screens/welcome_screen.dart';
 import 'screens/patient_profile_screen.dart';
+import 'screens/login_screen.dart';
+import 'services/theme_service.dart';
+import 'services/api_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
+  
+  // Initialize Hive with the correct path
+  await Hive.initFlutter('C:\\Users\\janja\\Work\\health_track_pro\\data');
+  await Hive.openBox('offlinePatients');
+  await Hive.openBox('offlinePatientRecords');
+  
+  // Initialize SharedPreferences
+  final prefs = await SharedPreferences.getInstance();
+  
+  // Check if welcome screen has been seen
+  final bool hasSeenWelcome = prefs.getBool('hasSeenWelcome') ?? false;
+
+  runApp(MyApp(prefs: prefs, hasSeenWelcome: hasSeenWelcome));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final SharedPreferences prefs;
+  final bool hasSeenWelcome;
+  
+  const MyApp({super.key, required this.prefs, required this.hasSeenWelcome});
 
   @override
   State<MyApp> createState() => _MyAppState();
 }
 
 class _MyAppState extends State<MyApp> {
-  ThemeMode _themeMode = ThemeMode.system;
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  ConnectivityResult _previousResult = ConnectivityResult.none;
 
-  void toggleThemeMode() {
-    setState(() {
-      _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+  @override
+  void initState() {
+    super.initState();
+    _initConnectivityListener();
+    _attemptInitialSync();
+  }
+
+  Future<void> _attemptInitialSync() async {
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult != ConnectivityResult.none) {
+      await ApiService.syncOfflineData();
+    }
+  }
+
+  void _initConnectivityListener() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      if (_previousResult == ConnectivityResult.none && 
+          (result == ConnectivityResult.mobile || result == ConnectivityResult.wifi)) {
+        print('Connection restored, attempting sync...');
+        ApiService.syncOfflineData();
+      }
+      _previousResult = result;
     });
   }
 
   @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'HealthTrack Pro',
-      debugShowCheckedModeBanner: false,
-
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primarySwatch: Colors.blue,
-        fontFamily: 'Roboto',
-        scaffoldBackgroundColor: Colors.white,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+    return ChangeNotifierProvider(
+      create: (_) => ThemeService(widget.prefs),
+      child: Consumer<ThemeService>(
+        builder: (context, themeService, _) {
+          return MaterialApp(
+            title: 'HealthTrack Pro',
+            theme: themeService.currentTheme,
+            debugShowCheckedModeBanner: false,
+            home: widget.hasSeenWelcome ? const LoginScreen() : const WelcomeScreen(),
+          );
+        },
       ),
-
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        primarySwatch: Colors.blueGrey,
-        fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
-
-      themeMode: _themeMode,
-
-      // Initial screen
-      home: const WelcomeScreen(),
-
-      // Static routes
-      routes: appRoutes,
-
-      // Dynamic routes
-      onGenerateRoute: (settings) {
-        switch (settings.name) {
-          case '/patientProfile':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(
-              builder: (_) => PatientProfileScreen(patient: args),
-            );
-          default:
-            return MaterialPageRoute(
-              builder: (_) => const Scaffold(
-                body: Center(child: Text("❌ 404 - Page not found")),
-              ),
-            );
-        }
-      },
     );
   }
 }

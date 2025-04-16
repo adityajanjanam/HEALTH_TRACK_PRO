@@ -26,7 +26,7 @@ final Map<String, WidgetBuilder> appRoutes = {
 
   // Records
   '/addPatientRecord': (context) => const AddPatientRecordScreen(patientId: ''),
-  '/viewRecords': (context) => const ViewRecordsScreen(), // Open records screen without patientId
+  '/viewRecords': (context) => const ViewRecordsScreen(patientId: '', patientName: ''), // Open records screen with default values
 };
 
 /// Dynamic routes for pages that require parameters
@@ -41,7 +41,10 @@ Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     case '/viewPatientRecords':
       final args = settings.arguments as Map<String, dynamic>;
       return MaterialPageRoute(
-        builder: (_) => ViewRecordsScreen(patientId: args['patientId']),
+        builder: (_) => ViewRecordsScreen(
+          patientId: args['patientId'],
+          patientName: args['patientName'],
+        ),
       );
 
     default:

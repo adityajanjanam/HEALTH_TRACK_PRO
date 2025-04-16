@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import '../services/api_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -20,32 +19,18 @@ class ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => isLoading = true);
 
     try {
-      final url = Uri.parse('http://192.168.1.6:5000/api/users/forgot-password');
-
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'email': emailController.text.trim()}),
+      final message = await ApiService.forgotPassword(emailController.text.trim());
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.green),
       );
+      Navigator.pop(context);
 
-      final data = json.decode(response.body);
-
-      if (response.statusCode == 200) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data['message'] ?? 'Reset link sent successfully')),
-        );
-        Navigator.pop(context);
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data['error'] ?? 'Failed to send reset link')),
-        );
-      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ Network error. Try again later.')),
+        SnackBar(content: Text('❌ Failed to send reset link: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) {

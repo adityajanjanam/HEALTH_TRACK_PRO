@@ -96,4 +96,43 @@ router.post('/sync', async (req, res) => {
   }
 });
 
+// @route   PUT /api/records/:id
+// @desc    Update a specific record
+router.put('/:id', async (req, res) => {
+  console.log(`--> HIT: PUT /api/records/${req.params.id}`);
+  try {
+    const { id } = req.params;
+    const { type, value } = req.body; // Only allow updating type and value
+
+    // Basic validation
+    if (!type && !value) {
+      return res.status(400).json({ error: 'At least type or value must be provided for update.' });
+    }
+
+    const updateData = {};
+    if (type) updateData.type = type;
+    if (value) updateData.value = value;
+    // Optionally add updated timestamp: updateData.timestamp = new Date();
+
+    const updatedRecord = await Record.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true } // Return the updated document
+    );
+
+    if (!updatedRecord) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    return res.status(200).json(updatedRecord);
+  } catch (err) {
+    console.error('❌ Error updating record:', err.message);
+    // Handle potential CastError if ID format is invalid
+    if (err.name === 'CastError') {
+      return res.status(400).json({ error: 'Invalid Record ID format' });
+    }
+    return res.status(500).json({ error: 'Server error while updating record' });
+  }
+});
+
 module.exports = router;
