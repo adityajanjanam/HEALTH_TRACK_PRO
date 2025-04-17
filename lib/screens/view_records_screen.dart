@@ -357,7 +357,7 @@ class _ViewRecordsScreenState extends State<ViewRecordsScreen> {
                       padding: const EdgeInsets.all(24),
                       child: Column(
                          mainAxisSize: MainAxisSize.min,
-                         children: [
+                children: [
                            Icon(Icons.error_outline, color: Colors.red.shade700, size: 48),
                            const SizedBox(height: 16),
                            Text(
@@ -374,24 +374,24 @@ class _ViewRecordsScreenState extends State<ViewRecordsScreen> {
                          ],
                       ),
                     ),
-                  ),
-                );
-              }
+      ),
+    );
+  }
               if (snapshot.hasData) {
                 final records = snapshot.data!;
                 // Check if the list is empty AFTER confirming snapshot.hasData
                 if (records.isEmpty) {
                   return Center(
                     child: Card(
-                      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(16),
                        shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                       ),
+        borderRadius: BorderRadius.circular(12),
+      ),
                        child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                           children: [
+        children: [
                              Icon(Icons.folder_off, size: 48, color: Colors.grey.shade400),
                              const SizedBox(height: 16),
                              const Text(
@@ -417,9 +417,9 @@ class _ViewRecordsScreenState extends State<ViewRecordsScreen> {
                               label: const Text('Refresh'),
                               onPressed: _refreshRecords, 
                             )
-                          ],
-                        ),
-                      ),
+              ],
+            ),
+          ),
                     ),
                   );
                 }
@@ -433,15 +433,15 @@ class _ViewRecordsScreenState extends State<ViewRecordsScreen> {
                           itemBuilder: (context, index) {
                             return _buildRecordCard(records[index]);
                           },
-                        ),
-                      );
-              }
+      ),
+    );
+  }
               // Should not happen with FutureBuilder, but added as fallback
               return const Center(child: Text('Something went wrong.', style: TextStyle(color: Colors.white)));
             },
+            ),
           ),
         ),
-      ),
     );
   }
 }

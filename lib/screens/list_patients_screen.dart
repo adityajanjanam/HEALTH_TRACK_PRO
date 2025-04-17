@@ -148,19 +148,20 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
   }
 
   Widget _buildPatientCard(Map<String, dynamic> patient) {
-    // Get current theme colors
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
     final colorScheme = theme.colorScheme;
-    // Use a standard theme color for secondary text instead of withOpacity
     final secondaryTextColor = colorScheme.onSurfaceVariant;
+    final isCritical = patient['isCritical'] ?? false;
 
     return Card(
       elevation: 4,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
-      // Use theme card color
-      color: colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: isCritical ? Colors.red.shade50 : colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isCritical ? BorderSide(color: Colors.red.shade300, width: 2) : BorderSide.none,
+      ),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -179,12 +180,11 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
               Row(
                 children: [
                   CircleAvatar(
-                    // Use theme colors for avatar
-                    backgroundColor: colorScheme.primaryContainer,
+                    backgroundColor: isCritical ? Colors.red.shade200 : colorScheme.primaryContainer,
                     child: Text(
                       patient['name']?.toString().substring(0, 1).toUpperCase() ?? '?',
                       style: TextStyle(
-                        color: colorScheme.onPrimaryContainer,
+                        color: isCritical ? Colors.red.shade900 : colorScheme.onPrimaryContainer,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -194,21 +194,33 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          patient['name'] ?? 'Unknown',
-                          // Use theme text color
-                          style: textTheme.titleMedium?.copyWith(color: colorScheme.onSurface), 
+                        Row(
+                          children: [
+                            Text(
+                              patient['name'] ?? 'Unknown',
+                              style: textTheme.titleMedium?.copyWith(
+                                color: colorScheme.onSurface,
+                                fontWeight: isCritical ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            if (isCritical) ...[
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                color: Colors.red.shade700,
+                                size: 20,
+                              ),
+                            ],
+                          ],
                         ),
                         Text(
                           'Age: ${patient['age'] ?? 'N/A'} | Gender: ${patient['gender'] ?? 'N/A'}',
-                          // Use theme secondary text color
-                          style: textTheme.bodyMedium?.copyWith(color: secondaryTextColor), 
+                          style: textTheme.bodyMedium?.copyWith(color: secondaryTextColor),
                         ),
                       ],
                     ),
                   ),
                   PopupMenuButton<String>(
-                    // Use theme icon color
                     icon: Icon(Icons.more_vert, color: secondaryTextColor), 
                     itemBuilder: (context) => [
                       PopupMenuItem(
@@ -217,7 +229,6 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
                           children: [
                             Icon(Icons.visibility, color: colorScheme.primary),
                             const SizedBox(width: 8),
-                            // Use default text style (should adapt)
                             const Text('View Records'), 
                           ],
                         ),
@@ -226,10 +237,8 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
                         value: 'delete',
                         child: Row(
                           children: [
-                            // Use theme error color
                             Icon(Icons.delete, color: colorScheme.error),
                             const SizedBox(width: 8),
-                             // Use default text style
                             const Text('Delete'),
                           ],
                         ),
@@ -256,16 +265,43 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
                   ),
                 ],
               ),
+              if (isCritical && patient['criticalNotes']?.isNotEmpty == true) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          patient['criticalNotes'],
+                          style: TextStyle(
+                            color: Colors.red.shade900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (patient['lastVitals'] != null) ...[
+                const SizedBox(height: 8),
+                _buildVitalsRow(patient['lastVitals']),
+              ],
               if (patient['contact'] != null) ...[
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    // Use theme icon color
                     Icon(Icons.phone, size: 16, color: secondaryTextColor),
                     const SizedBox(width: 4),
                     Text(
                       patient['contact'],
-                      // Use theme secondary text color
                       style: textTheme.bodyMedium?.copyWith(color: secondaryTextColor),
                     ),
                   ],
@@ -275,7 +311,6 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Medical History:',
-                  // Use theme text color (slightly bolder)
                   style: textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.w600
@@ -284,7 +319,6 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
                 const SizedBox(height: 4),
                 Text(
                   patient['history'],
-                   // Use theme secondary text color
                   style: textTheme.bodyMedium?.copyWith(color: secondaryTextColor),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -294,6 +328,36 @@ class _ListPatientsScreenState extends State<ListPatientsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildVitalsRow(Map<String, dynamic> vitals) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _buildVitalItem('BP', vitals['bloodPressure'] ?? 'N/A'),
+        _buildVitalItem('HR', '${vitals['heartRate'] ?? 'N/A'} bpm'),
+        _buildVitalItem('SpO2', '${vitals['oxygenLevel'] ?? 'N/A'}%'),
+        _buildVitalItem('RR', '${vitals['respiratoryRate'] ?? 'N/A'}'),
+      ],
+    );
+  }
+
+  Widget _buildVitalItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
     );
   }
 

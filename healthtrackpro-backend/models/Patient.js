@@ -52,6 +52,22 @@ const patientSchema = new mongoose.Schema(
         default: '',
       },
     },
+    isCritical: {
+      type: Boolean,
+      default: false,
+    },
+    criticalNotes: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    lastVitals: {
+      bloodPressure: String,
+      heartRate: Number,
+      oxygenLevel: Number,
+      respiratoryRate: Number,
+      timestamp: String
+    },
     timestamp: {
       type: String,
       required: true,

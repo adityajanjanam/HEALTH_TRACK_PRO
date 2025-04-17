@@ -7,6 +7,7 @@ import 'signup_screen.dart';
 import 'home_screen.dart';
 import 'forgot_password_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'welcome_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,6 +27,20 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _loadSavedCredentials();
+    _checkWelcomeScreen();
+  }
+
+  Future<void> _checkWelcomeScreen() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenWelcome = prefs.getBool('hasSeenWelcome') ?? false;
+    if (!hasSeenWelcome) {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+        );
+      }
+    }
   }
 
   Future<void> _loadSavedCredentials() async {
@@ -245,7 +260,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         const Text("Don't have an account?"),
                     TextButton(
                           onPressed: () {
-                            // Navigation to sign up screen would go here
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SignupScreen()),
+                            );
                           },
                           child: const Text('Sign Up'),
                         ),

@@ -71,6 +71,8 @@ class ApiService {
       if (kDebugMode) print('❌ JSON decode error: $e');
       return null;
     }
+
+    
   }
 
   /// ------------------ PATIENTS ------------------

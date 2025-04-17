@@ -5,12 +5,8 @@ class Environment {
   
   static String get apiBaseUrl {
     if (isDevelopment) {
-      // Use localhost for web, host IP for mobile
-      if (kIsWeb) {
-        return 'http://localhost:5000/api';
-      } else {
-        return 'http://192.168.1.10:5000/api'; 
-      }
+      // Use localhost for all development environments
+      return 'http://localhost:3000/api';
     }
     // Production URL
     return 'https://api.healthtrackpro.com/api';

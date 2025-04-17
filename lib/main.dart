@@ -21,17 +21,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Hive with the correct path
-  await Hive.initFlutter('C:\\Users\\janja\\Work\\health_track_pro\\data');
+  await Hive.initFlutter();
   await Hive.openBox('offlinePatients');
   await Hive.openBox('offlinePatientRecords');
   
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
   
-  // Check if welcome screen has been seen
-  final bool hasSeenWelcome = prefs.getBool('hasSeenWelcome') ?? false;
+  // Reset welcome screen flag for testing
+  await prefs.setBool('hasSeenWelcome', false);
 
-  runApp(MyApp(prefs: prefs, hasSeenWelcome: hasSeenWelcome));
+  runApp(MyApp(prefs: prefs, hasSeenWelcome: false));
 }
 
 class MyApp extends StatefulWidget {
